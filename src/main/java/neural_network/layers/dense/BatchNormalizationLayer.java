@@ -1,7 +1,6 @@
 package neural_network.layers.dense;
 
 import lombok.Setter;
-import neural_network.initialization.Initializer;
 import neural_network.optimizer.Optimizer;
 import neural_network.regularization.Regularization;
 import nnarray.NNMatrix;
@@ -9,52 +8,68 @@ import nnarray.NNVector;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.util.Arrays;
 import java.util.Scanner;
 
 public class BatchNormalizationLayer extends DenseNeuralLayer {
     //trainable parts
     private Regularization regularization;
-    private Initializer initializer;
     private boolean trainable;
     @Setter
     private boolean loadWeight;
 
-    //weight and threshold
+    private final float momentum;
+
+    //betta
     @Setter
-    private NNMatrix weight;
-    private NNMatrix derWeight;
-    private NNMatrix[] optimizeWeight;
+    private NNVector betta;
+    private NNVector derBetta;
+    private NNVector[] optimizeBetta;
+    //gamma
     @Setter
-    private NNVector threshold;
-    private NNVector derThreshold;
-    private NNVector[] optimizeThreshold;
+    private NNVector gamma;
+    private NNVector derGamma;
+    private NNVector[] optimizeGamma;
 
     private NNMatrix inputData;
 
-    public BatchNormalizationLayer(int countNeuron) {
-        this.countNeuron = countNeuron;
+    private NNVector movingMean;
+    private NNVector movingVar;
+
+    private NNVector mean, var;
+    private NNMatrix normOutput;
+
+    public BatchNormalizationLayer() {
+        this(0.99);
+    }
+
+    public BatchNormalizationLayer(double momentum) {
+        this.momentum = (float) momentum;
         this.trainable = true;
-        initializer = new Initializer.HeNormal();
     }
 
     @Override
     public void initialize(int input) {
+        this.countNeuron = input;
         if (!loadWeight) {
-            threshold = new NNVector(countNeuron);
-            weight = new NNMatrix(input, countNeuron);
-            initializer.initialize(weight);
+            gamma = new NNVector(countNeuron);
+            movingMean = new NNVector(countNeuron);
+            movingVar = new NNVector(countNeuron);
+            betta = new NNVector(countNeuron);
+            gamma.fill(1);
+            movingVar.fill(1);
         }
     }
 
     @Override
     public void initialize(Optimizer optimizer) {
         if (optimizer.getCountParam() > 0) {
-            optimizeThreshold = new NNVector[optimizer.getCountParam()];
-            optimizeWeight = new NNMatrix[optimizer.getCountParam()];
+            optimizeGamma = new NNVector[optimizer.getCountParam()];
+            optimizeBetta = new NNVector[optimizer.getCountParam()];
 
             for (int i = 0; i < optimizer.getCountParam(); i++) {
-                optimizeThreshold[i] = new NNVector(threshold);
-                optimizeWeight[i] = new NNMatrix(weight);
+                optimizeGamma[i] = new NNVector(gamma);
+                optimizeBetta[i] = new NNVector(betta);
             }
         }
     }
@@ -63,63 +78,70 @@ public class BatchNormalizationLayer extends DenseNeuralLayer {
     public void update(Optimizer optimizer) {
         if (trainable) {
             if (optimizer.getClipValue() != 0) {
-                derWeight.clip(optimizer.getClipValue());
-                derThreshold.clip(optimizer.getClipValue());
+                derBetta.clip(optimizer.getClipValue());
+                derGamma.clip(optimizer.getClipValue());
             }
 
             if (inputData.getRow() != 1) {
-                derWeight.div(inputData.getRow());
-                derThreshold.div(inputData.getRow());
+                derBetta.div(inputData.getRow());
+                derGamma.div(inputData.getRow());
             }
 
-            if(regularization!= null){
-                regularization.regularization(weight);
-                regularization.regularization(threshold);
+            if (regularization != null) {
+                regularization.regularization(betta);
+                regularization.regularization(gamma);
             }
 
-            optimizer.updateWeight(weight, derWeight, optimizeWeight);
-            optimizer.updateWeight(threshold, derThreshold, optimizeThreshold);
+            optimizer.updateWeight(betta, derBetta, optimizeBetta);
+            optimizer.updateWeight(gamma, derGamma, optimizeGamma);
         }
     }
 
     @Override
     public void generateOutput(NNMatrix input) {
-        this.inputData = input;
-        outputs = inputData.mul(weight);
-        outputs.addVector(threshold);
+        normOutput = input.normalization(movingMean, movingVar);
+        outputs = normOutput.mulAndAdd(gamma, betta);
     }
 
     @Override
     public void generateTrainOutput(NNMatrix input) {
-        generateOutput(input);
+        inputData = input;
+        mean = input.sumRow();
+        mean.div(input.getRow());
+        var = input.sumRowSubPow2(mean);
+        var.div(input.getRow());
+
+        movingMean.momentum(mean, momentum);
+        movingVar.momentum(var, momentum);
+
+        normOutput = input.normalization(mean, var);
+        outputs = normOutput.mulAndAdd(gamma, betta);
     }
 
     @Override
     public void generateError(NNMatrix error) {
-        this.error = error.mulT(weight);
+        NNMatrix errorNormOut = error.mul(gamma);
+        NNVector errorVar = error.derVar(inputData, mean, var, gamma);
+        NNVector errorMean = error.derMean(inputData, mean, var, errorVar, gamma);
+
+        this.error = errorNormOut.derNorm(inputData, mean, errorMean, var, errorVar);
     }
 
     @Override
     public void generateErrorWeight(NNMatrix error) {
         if (trainable) {
-            derWeight = inputData.transpose().mul(error);
-            derThreshold = error.sumRow();
+            derBetta = error.sumRow();
+            derGamma = error.mulAndSumRow(normOutput);
         }
     }
 
-    public BatchNormalizationLayer setTrainable(boolean trainable){
+    public BatchNormalizationLayer setTrainable(boolean trainable) {
         this.trainable = trainable;
 
         return this;
     }
 
-    public BatchNormalizationLayer setInitializer(Initializer initializer){
-        this.initializer = initializer;
-
-        return this;
-    }
-
-    public BatchNormalizationLayer setRegularization(Regularization regularization){
+    public BatchNormalizationLayer setRegularization(Regularization regularization) {
         this.regularization = regularization;
 
         return this;
@@ -127,17 +149,20 @@ public class BatchNormalizationLayer extends DenseNeuralLayer {
 
     @Override
     public void info() {
-        int countParam = weight.getRow() * weight.getColumn() + threshold.getLength();
-        System.out.println("Dense \t\t|  " + weight.getRow() + "\t\t\t|  " + countNeuron + "\t\t\t|\t" + countParam);
+        int countParam = betta.getLength() * 4;
+        System.out.println("Batch norm\t|  " + countNeuron + "\t\t\t|  " + countNeuron + "\t\t\t|\t" + countParam);
     }
 
     @Override
     public void write(FileWriter writer) throws IOException {
-        writer.write("Dense layer\n");
-        writer.write(countNeuron  + "\n");
-        threshold.save(writer);
-        weight.save(writer);
-        if(regularization != null) {
+        writer.write("Batch normalization layer\n");
+        writer.write(momentum + "\n");
+        gamma.save(writer);
+        betta.save(writer);
+        movingMean.save(writer);
+        movingVar.save(writer);
+
+        if (regularization != null) {
             regularization.write(writer);
         } else {
             writer.write("null\n");
@@ -146,13 +171,16 @@ public class BatchNormalizationLayer extends DenseNeuralLayer {
         writer.flush();
     }
 
-    public static BatchNormalizationLayer read(Scanner scanner){
-        BatchNormalizationLayer denseLayer = new BatchNormalizationLayer(Integer.parseInt(scanner.nextLine()));
-        denseLayer.loadWeight = false;
-        denseLayer.threshold = NNVector.read(scanner);
-        denseLayer.weight = NNMatrix.read(scanner);
-        denseLayer.setRegularization(Regularization.read(scanner));
-        denseLayer.setTrainable(Boolean.parseBoolean(scanner.nextLine()));
-        return denseLayer;
+    public static BatchNormalizationLayer read(Scanner scanner) {
+        BatchNormalizationLayer layer = new BatchNormalizationLayer(Float.parseFloat(scanner.nextLine()));
+        layer.loadWeight = false;
+        layer.gamma = NNVector.read(scanner);
+        layer.betta = NNVector.read(scanner);
+        layer.movingMean = NNVector.read(scanner);
+        layer.movingVar = NNVector.read(scanner);
+        layer.setRegularization(Regularization.read(scanner));
+        layer.setTrainable(Boolean.parseBoolean(scanner.nextLine()));
+        layer.loadWeight = true;
+        return layer;
     }
 }

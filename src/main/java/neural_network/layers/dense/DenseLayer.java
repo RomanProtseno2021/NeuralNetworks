@@ -21,7 +21,7 @@ public class DenseLayer extends DenseNeuralLayer {
     @Setter
     private boolean loadWeight;
 
-    //weight and threshold
+    //betta and gamma
     @Setter
     private NNMatrix weight;
     private NNMatrix derWeight;
@@ -155,6 +155,7 @@ public class DenseLayer extends DenseNeuralLayer {
         denseLayer.weight = NNMatrix.read(scanner);
         denseLayer.setRegularization(Regularization.read(scanner));
         denseLayer.setTrainable(Boolean.parseBoolean(scanner.nextLine()));
+        denseLayer.loadWeight = true;
         return denseLayer;
     }
 }

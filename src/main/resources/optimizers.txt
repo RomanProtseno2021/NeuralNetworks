@@ -5,3 +5,4 @@ AdaGrad                 4.6003077E-4
 AdaDelta                0.30088967
 RMSProp                 0.5274499
 Adam                    1.25982E-11
+

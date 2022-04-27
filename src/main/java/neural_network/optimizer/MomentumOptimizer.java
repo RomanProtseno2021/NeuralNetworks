@@ -3,7 +3,6 @@ package neural_network.optimizer;
 import lombok.Data;
 import nnarray.NNArray;
 
-@Data
 public class MomentumOptimizer extends Optimizer {
     /**
      * rt - retention rate

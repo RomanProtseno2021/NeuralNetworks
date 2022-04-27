@@ -15,7 +15,6 @@ public class AdamOptimizer extends Optimizer {
     private final float beta2;
     private final float learningRate;
 
-    private int t;
     private float b1t;
     private float b2t;
 
@@ -46,6 +45,7 @@ public class AdamOptimizer extends Optimizer {
     public void updateWeight(NNArray weight, NNArray deltaWeight, NNArray[] additionParam) {
         additionParam[0].momentum(deltaWeight, beta1);
         additionParam[1].momentumPow2(deltaWeight, beta2);
+
         weight.subDivSqrtNorm(additionParam[0], additionParam[1], learningRate, b1t, b2t);
         deltaWeight.clear();
     }

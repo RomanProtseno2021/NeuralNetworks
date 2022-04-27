@@ -39,17 +39,17 @@ public class DropoutLayer extends DenseNeuralLayer {
 
     @Override
     public void generateErrorWeight(NNMatrix error) {
-        //no have weight
+        //no have betta
     }
 
     @Override
     public void initialize(Optimizer optimizer) {
-        //no have weight
+        //no have betta
     }
 
     @Override
     public void update(Optimizer optimizer) {
-        //no have weight
+        //no have betta
     }
 
     @Override

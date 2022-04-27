@@ -3,6 +3,7 @@ package nnarray;
 import lombok.Getter;
 
 import static java.lang.Math.log;
+import static java.lang.Math.pow;
 
 public class NNArray {
     @Getter
@@ -220,7 +221,7 @@ public class NNArray {
 
     public void binaryCrossEntropy(NNArray outputs, NNArray idealOutputs) {
         for (int i = 0; i < size; i++) {
-            data[i] = (outputs.data[i] - idealOutputs.data[i]) / ((1 - outputs.data[i]) * outputs.data[i]);
+            data[i] = (outputs.data[i] - idealOutputs.data[i]) / ((1 - outputs.data[i]) * outputs.data[i] + 0.00000001f);
         }
     }
 
@@ -236,11 +237,24 @@ public class NNArray {
         }
     }
 
+    public void silu(NNArray input) {
+        for (int i = 0; i < size; i++) {
+            data[i] = (float) (data[i] / (1 + pow(Math.E, -data[i])));
+        }
+    }
+
     public void derRelu(NNArray input, NNArray error) {
         for (int i = 0; i < size; i++) {
             if (input.data[i] > 0) {
                 data[i] = error.data[i];
             }
+        }
+    }
+
+    public void derSilu(NNArray input, NNArray error) {
+        for (int i = 0; i < size; i++) {
+            data[i] = (float) (error.data[i] * ((1 + pow(Math.E, -input.data[i]) + input.data[i] * pow(Math.E, -input.data[i]))
+                    / Math.pow(1 + pow(Math.E, -input.data[i]), 2)));
         }
     }
 
@@ -266,9 +280,93 @@ public class NNArray {
         }
     }
 
+    public void derElu(NNArray input, NNArray error, float param) {
+        for (int i = 0; i < size; i++) {
+            if (input.data[i] > 0) {
+                data[i] = error.data[i];
+            } else {
+                data[i] = (float) (param * Math.pow(Math.E, input.data[i]) * error.data[i]);
+            }
+        }
+    }
+
     public void sigmoid(NNArray input) {
         for (int i = 0; i < size; i++) {
             data[i] = (float) (1.0 / (1 + Math.pow(Math.E, -input.data[i])));
+        }
+    }
+
+    public void gaussian(NNArray input) {
+        for (int i = 0; i < size; i++) {
+            data[i] = (float) (Math.pow(Math.E, -input.data[i] * input.data[i]));
+        }
+    }
+
+    public void derGaussian(NNArray input, NNArray error) {
+        for (int i = 0; i < size; i++) {
+            data[i] = (float) (-2 * input.data[i] * Math.pow(Math.E, -input.data[i] * input.data[i]) * error.data[i]);
+        }
+    }
+
+    public float max() {
+        float max = data[0];
+        for (int i = 1; i < size; i++) {
+            if (data[i] > max) {
+                max = data[i];
+            }
+        }
+        return max;
+    }
+
+    public void softmax(NNArray input) {
+        if (input instanceof NNMatrix) {
+            int index;
+            final int rows = ((NNMatrix) input).getRow();
+            final int column = ((NNMatrix) input).getColumn();
+            for (int k = 0; k < rows; k++) {
+                float sum = 0;
+                index = k * column;
+                float max = input.data[index];
+                for (int i = 1; i < column; i++, index++) {
+                    if (max < data[index])
+                        max = data[index];
+                }
+                index = k * column;
+                for (int i = 0; i < column; i++, index++) {
+                    data[index] = (float) (Math.pow(Math.E, input.data[index] - max));
+                    sum += data[index];
+                }
+
+                index = k * column;
+                for (int i = 0; i < column; i++, index++) {
+                    data[index] /= sum;
+                }
+            }
+        }
+    }
+
+    public void derSoftmax(NNArray output, NNArray error) {
+        if (output instanceof NNMatrix) {
+            int index, indexI, indexJ;
+            final int rows = ((NNMatrix) output).getRow();
+            final int column = ((NNMatrix) output).getColumn();
+            for (int k = 0; k < rows; k++) {
+                float value;
+                index = k * column;
+                indexI = index;
+                for (int i = 0; i < column; i++, indexI++) {
+                    data[indexI] = 0;
+                    indexJ = index;
+                    for (int j = 0; j < column; j++, indexJ++) {
+                        if (i != j) {
+                            value = output.data[indexI] * -output.data[indexJ];
+                        } else {
+                            value = output.data[indexI] * (1 - output.data[indexI]);
+                        }
+                        data[indexI] += error.getData()[indexJ] * value;
+                    }
+                }
+            }
         }
     }
 
@@ -307,6 +405,14 @@ public class NNArray {
     public void hardSigmoid(NNArray input) {
         for (int i = 0; i < size; i++) {
             data[i] = Math.max(0, Math.min(1, input.data[i] * 0.2f + 0.5f));
+        }
+    }
+
+    public void derHardSigmoid(NNArray output, NNArray error) {
+        for (int i = 0; i < size; i++) {
+            if (output.data[i] >= 0 && output.data[i] <= 1) {
+                data[i] = 0.2f * error.data[i];
+            }
         }
     }
 

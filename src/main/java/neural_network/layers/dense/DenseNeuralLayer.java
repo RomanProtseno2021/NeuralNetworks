@@ -36,6 +36,7 @@ public abstract class DenseNeuralLayer extends NeuralLayer{
                 case "Dense layer" -> layers.add(DenseLayer.read(scanner));
                 case "Dropout layer" -> layers.add(DropoutLayer.read(scanner));
                 case "Activation layer" -> layers.add(ActivationLayer.read(scanner));
+                case "Batch normalization layer" -> layers.add(BatchNormalizationLayer.read(scanner));
             }
 
             layer = scanner.nextLine();

@@ -51,6 +51,10 @@ public class DeepNeuralNetwork {
         return this;
     }
 
+    public NNMatrix getOutputs(){
+        return layers.get(layers.size() - 1).getOutputs();
+    }
+
     public DeepNeuralNetwork addLayer(DenseNeuralLayer layer) {
         layers.add(layer);
 
@@ -76,7 +80,6 @@ public class DeepNeuralNetwork {
 
     public DeepNeuralNetwork setOptimizer(Optimizer optimizer) {
         this.optimizer = optimizer;
-
         return this;
     }
 
@@ -95,7 +98,7 @@ public class DeepNeuralNetwork {
             DeepNeuralNetwork network = new DeepNeuralNetwork()
                     .addInputLayer(Integer.parseInt(scanner.nextLine()));
             DenseNeuralLayer.read(scanner, network.layers);
-            network.create();
+
             return network;
         }
         throw new Exception("Network is not deep");
@@ -106,6 +109,15 @@ public class DeepNeuralNetwork {
         for (int i = 1; i < layers.size(); i++) {
             layers.get(i).generateTrainOutput(layers.get(i - 1).getOutputs());
         }
+    }
+
+    public NNMatrix query(NNMatrix input) {
+        layers.get(0).generateOutput(input);
+        for (int i = 1; i < layers.size(); i++) {
+            layers.get(i).generateOutput(layers.get(i - 1).getOutputs());
+        }
+
+        return getOutputs();
     }
 
     public float train(NNMatrix input, NNMatrix idealOutput) {
@@ -142,9 +154,7 @@ public class DeepNeuralNetwork {
         }
     }
 
-    public float accuracy(NNMatrix input, NNMatrix idealOutput) {
-        queryTrain(input);
-        NNArray error = new NNMatrix(idealOutput);
-        return functionLoss.findAccuracy(layers.get(layers.size() - 1).getOutputs(), idealOutput);
+    public float accuracy(NNMatrix idealOutput) {
+        return functionLoss.findAccuracy(getOutputs(), idealOutput);
     }
 }
